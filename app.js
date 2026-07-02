@@ -109,6 +109,19 @@ function formatMcap(mcap) {
     return mcap.toFixed(0);
 }
 
+function formatCurrency(val) {
+    if (val === undefined || val === null || val === 0) return "-";
+    if (Math.abs(val) >= 1e9) return (val / 1e9).toFixed(2) + "B";
+    if (Math.abs(val) >= 1e6) return (val / 1e6).toFixed(2) + "M";
+    if (Math.abs(val) >= 1e3) return (val / 1e3).toFixed(2) + "K";
+    return val.toFixed(2);
+}
+
+function formatRevenue(val) {
+    if (!val) return `<span class="muted">N/A</span>`;
+    return formatCurrency(val);
+}
+
 function formatVolume(vol) {
     if (!vol || vol <= 0) return "0";
     if (vol >= 1e6) return (vol / 1e6).toFixed(1) + "M";
@@ -287,6 +300,50 @@ function updateLastUpdated(timestamp) {
 }
 
 // ─── Filter Logic ───
+function applyFilters() {
+    const q = document.getElementById("search-input").value.toLowerCase();
+    const sector = document.getElementById("filter-sector").value;
+    const pe = document.getElementById("filter-pe").value;
+    const dy = document.getElementById("filter-dy").value;
+    const mcap = document.getElementById("filter-mcap").value;
+    const rev = document.getElementById("filter-revenue") ? document.getElementById("filter-revenue").value : "all";
+
+    let filtered = STOCKS.filter(s => {
+        // Search
+        if (q && !(s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q))) return false;
+        // Sector
+        if (sector !== "all" && s.sector !== sector) return false;
+        // P/E
+        if (pe) {
+            const peVal = parseFloat(pe);
+            if (s.pe <= 0 || s.pe > peVal) return false;
+        }
+        // Div Yield
+        if (dy) {
+            const dyVal = parseFloat(dy);
+            if (s.divYield < dyVal) return false;
+        }
+        // Market Cap
+        if (mcap !== "all") {
+            const cap = s.mcap || 0;
+            if (mcap === "large" && cap < 50e9) return false;
+            if (mcap === "mid" && (cap < 10e9 || cap >= 50e9)) return false;
+            if (mcap === "small" && cap >= 10e9) return false;
+        }
+        // Revenue
+        if (rev !== "all") {
+            const r = s.revenue || 0;
+            if (rev === "high" && r < 50e9) return false;
+            if (rev === "med" && (r < 10e9 || r >= 50e9)) return false;
+            if (rev === "low" && r >= 10e9) return false;
+        }
+        
+        return true;
+    });
+
+    renderAll(filtered);
+}
+
 function getFilteredStocks() {
     const sector = document.getElementById("filter-sector").value;
     const index = document.getElementById("filter-index").value;
@@ -362,9 +419,10 @@ function renderTable(stocks) {
         return `
         <tr class="row-animate" style="animation-delay:${Math.min(i * 0.02, 1)}s" data-symbol="${stock.symbol}">
             <td><button class="star-btn ${isWatched ? "active" : ""}" data-star="${stock.symbol}" title="Toggle Watchlist">${isWatched ? "★" : "☆"}</button></td>
-            <td><span class="cell-symbol">${stock.symbol}<span class="cell-name">${stock.name}</span></span></td>
-            <td><span class="cell-sector">${stock.sector}</span></td>
-            <td class="cell-price">${formatPrice(stock.price)}</td>
+            <td onclick="showDetail('${stock.symbol}')">${stock.symbol} ${stock.isNC ? '<span class="nc-tag">NC</span>' : ''}</td>
+            <td><span class="sector-pill">${stock.sector}</span></td>
+            <td>${formatRevenue(stock.revenue)}</td>
+            <td style="font-weight:600;">Rs ${stock.price.toFixed(2)}</td>
             <td class="cell-change ${changeClass}">${formatChange(stock.change)}</td>
             <td class="cell-change ${yearChangeClass}">${formatChange(stock.yearChange)}</td>
             <td class="cell-mcap">${formatMcap(stock.mcap)}</td>
@@ -704,6 +762,22 @@ async function showDetail(symbol) {
             }
             html += `</div></div>`;
             
+            if (data.revenueHistory && Object.keys(data.revenueHistory).length > 0) {
+                const years = Object.keys(data.revenueHistory).sort();
+                html += `<div class="company-financials" style="margin-top: 16px;">
+                    <h4>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                        Annual Revenue History
+                    </h4>
+                    <table class="data-table" style="margin-top:8px;">
+                        <thead><tr><th>Year</th><th style="text-align:right">Revenue (PKR)</th></tr></thead>
+                        <tbody>`;
+                years.reverse().slice(0, 5).forEach(year => {
+                    html += `<tr><td>${year}</td><td style="text-align:right">${formatCurrency(data.revenueHistory[year])}</td></tr>`;
+                });
+                html += `</tbody></table></div>`;
+            }
+
             if (data.announcements && data.announcements.length > 0) {
                 html += `<div class="news-timeline">
                     <h4>
@@ -873,6 +947,9 @@ function initEventListeners() {
 
     // Reset
     document.getElementById("btn-reset-filters").addEventListener("click", resetFilters);
+    document.getElementById("filter-dy").addEventListener("input", applyFilters);
+    const revFilter = document.getElementById("filter-revenue");
+    if (revFilter) revFilter.addEventListener("change", applyFilters);
 
     // Presets
     document.querySelectorAll(".preset-chip").forEach(chip => {

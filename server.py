@@ -290,11 +290,12 @@ def parse_index_data(html):
 def fetch_url(url):
     """Fetch URL content with proper headers."""
     req = urllib.request.Request(url, headers={
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml",
         "Accept-Language": "en-US,en;q=0.9",
     })
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    # Reduced timeout to 5 seconds to prevent the server from hanging if PSX blocks the IP
+    with urllib.request.urlopen(req, timeout=5) as resp:
         return resp.read().decode("utf-8", errors="replace")
 
 
@@ -510,7 +511,11 @@ class PSXHandler(http.server.SimpleHTTPRequestHandler):
 
 # ─── Main ───
 if __name__ == "__main__":
-    server = http.server.HTTPServer(("", PORT), PSXHandler)
+    # Use ThreadingHTTPServer so that multiple requests don't block each other
+    if hasattr(http.server, 'ThreadingHTTPServer'):
+        server = http.server.ThreadingHTTPServer(("", PORT), PSXHandler)
+    else:
+        server = http.server.HTTPServer(("", PORT), PSXHandler)
     print(f"\n  🚀 PSX Stock Screener is running!")
     print(f"  📊 Open http://localhost:{PORT} in your browser")
     print(f"  📡 Live data from dps.psx.com.pk")

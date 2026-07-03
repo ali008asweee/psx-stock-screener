@@ -34,64 +34,7 @@ try:
 except Exception as e:
     print(f"[PSX] Could not load financials.json: {e}")
 
-def update_financials_background():
-    """Slowly scrape financials in the background to keep the cache fresh."""
-    while True:
-        if stock_cache["data"]:
-            symbols = [s["symbol"] for s in stock_cache["data"]]
-            updated = False
-            for symbol in symbols:
-                try:
-                    # Skip if we already fetched recently (very basic logic, we just do a slow loop)
-                    # Actually, we fetch every symbol once per full loop.
-                    req = urllib.request.Request(f"https://dps.psx.com.pk/company/{symbol}", headers={'User-Agent': 'Mozilla/5.0'})
-                    html = urllib.request.urlopen(req, timeout=10).read().decode('utf-8')
-                    
-                    # Look for revenue table
-                    from html.parser import HTMLParser
-                    # To avoid BS4 dependency in server.py, use Regex to find Revenue/Sales
-                    import re
-                    revenue_data = {}
-                    tables = re.findall(r'<table[^>]*>.*?</table>', html, re.DOTALL | re.IGNORECASE)
-                    for t in tables:
-                        if 'Sales' in t or 'Turnover' in t or 'Revenue' in t:
-                            # Extract headers (years)
-                            headers = re.findall(r'<th[^>]*>.*?(\d{4}).*?</th>', t, re.IGNORECASE | re.DOTALL)
-                            if headers:
-                                rows = re.findall(r'<tr[^>]*>.*?</tr>', t, re.IGNORECASE | re.DOTALL)
-                                for r in rows:
-                                    cols = re.findall(r'<td[^>]*>(.*?)</td>', r, re.IGNORECASE | re.DOTALL)
-                                    if cols:
-                                        label = re.sub(r'<[^>]+>', '', cols[0]).strip().lower()
-                                        if 'sales' in label or 'revenue' in label or 'turnover' in label:
-                                            for i, h in enumerate(headers):
-                                                if i + 1 < len(cols):
-                                                    val_str = re.sub(r'<[^>]+>', '', cols[i+1]).replace(',', '').strip()
-                                                    try:
-                                                        revenue_data[h] = float(val_str)
-                                                    except ValueError:
-                                                        pass
-                                            break
-                            if revenue_data:
-                                break
-                    
-                    if revenue_data:
-                        financials_cache[symbol] = revenue_data
-                        updated = True
-                except Exception as e:
-                    pass
-                time.sleep(2) # Sleep 2 seconds between requests
-                
-            if updated:
-                try:
-                    with open(FINANCIALS_FILE, "w") as f:
-                        json.dump(financials_cache, f, indent=2)
-                except Exception:
-                    pass
-        time.sleep(3600) # Wait 1 hour before next full sweep
-
-# Start background thread
-threading.Thread(target=update_financials_background, daemon=True).start()
+# Start background thread removed to prevent rate limiting from PSX
 
 # ─── PSX Sector Code Mapping ───
 SECTOR_MAP = {
